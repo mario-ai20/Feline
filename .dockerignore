@@ -1,0 +1,12 @@
+.git
+.next
+node_modules
+dist-electron
+coverage
+*.log
+.env
+.env.*
+README.md
+AGENTS.md
+CLAUDE.md
+docker-compose.yml
