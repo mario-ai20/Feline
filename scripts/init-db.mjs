@@ -111,9 +111,25 @@ export function initDatabase(dbPath) {
   return resolvedDbPath;
 }
 
+export function getDatabasePathFromUrl(databaseUrl = process.env.DATABASE_URL) {
+  if (!databaseUrl) {
+    return path.join(process.cwd(), "prisma", "dev.db");
+  }
+
+  if (!databaseUrl.startsWith("file:")) {
+    throw new Error(`Unsupported DATABASE_URL protocol: ${databaseUrl}`);
+  }
+
+  const rawPath = databaseUrl.slice("file:".length);
+  if (!rawPath) {
+    return path.join(process.cwd(), "prisma", "dev.db");
+  }
+
+  return path.isAbsolute(rawPath) ? rawPath : path.resolve(process.cwd(), rawPath);
+}
+
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const dbDir = path.join(process.cwd(), "prisma");
-  const dbPath = path.join(dbDir, "dev.db");
+  const dbPath = getDatabasePathFromUrl();
   const result = initDatabase(dbPath);
   console.log(`Database initialized at ${result}`);
 }
