@@ -1,15 +1,17 @@
-﻿"use client";
+"use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { signOut } from "next-auth/react";
 import Image from "next/image";
 import type { AgeMode, Language, ThemeChoice } from "@prisma/client";
 import { getDictionary } from "@/lib/i18n";
+import { storeLoginBackground } from "@/lib/login-preferences";
 
 type ThreadSummary = {
   id: string;
   title: string;
   updatedAt: string;
+  isNsfw: boolean;
   preview: string;
 };
 
@@ -24,6 +26,7 @@ type SettingsData = {
   language: Language;
   theme: ThemeChoice;
   backgroundImage: string | null;
+  loginBackground: string | null;
   introSound: string | null;
   backgroundSound: string | null;
   memoryEnabled: boolean;
@@ -36,6 +39,7 @@ type SettingsData = {
 
 type Assets = {
   backgrounds: string[];
+  loginBackgrounds: string[];
   introSounds: string[];
   backgroundSounds: string[];
 };
@@ -134,6 +138,101 @@ function getDisplayFileName(assetPath: string): string {
   return parts[parts.length - 1] ?? assetPath;
 }
 
+function isVideoFile(fileName: string): boolean {
+  return /\.(mp4|webm|ogg)$/i.test(fileName);
+}
+
+function getVideoMimeType(fileName: string): string {
+  if (/\.webm$/i.test(fileName)) {
+    return "video/webm";
+  }
+
+  if (/\.ogg$/i.test(fileName)) {
+    return "video/ogg";
+  }
+
+  return "video/mp4";
+}
+
+const MAX_INTRO_SOUND_SECONDS = 5;
+const LEGACY_LOGIN_BACKGROUND_VALUES = new Set(["Intro 1.mp4", "Intro1.mp4"]);
+
+function setDocumentIcon(href: string) {
+  const links = Array.from(document.querySelectorAll<HTMLLinkElement>('link[rel*="icon"]'));
+  if (links.length === 0) {
+    const link = document.createElement("link");
+    link.rel = "icon";
+    link.href = href;
+    document.head.appendChild(link);
+    return;
+  }
+
+  for (const link of links) {
+    link.href = href;
+  }
+}
+
+type BackgroundCategory = {
+  key: string;
+  label: string;
+  order: number;
+};
+
+const backgroundCategories: BackgroundCategory[] = [
+  { key: "standaard", label: "Standaard", order: 0 },
+  { key: "intens", label: "Intens", order: 1 },
+  { key: "space", label: "Space", order: 2 },
+  { key: "the sun", label: "The Sun", order: 3 },
+  { key: "the moon", label: "The Moon", order: 4 },
+  { key: "the earth", label: "The Earth", order: 5 },
+  { key: "nsfw", label: "NSFW", order: 6 },
+  { key: "overig", label: "Overig", order: 99 },
+];
+
+function isNsfwBackground(filePath: string): boolean {
+  const parts = filePath.split("/");
+  const folderName = parts.length > 1 ? parts[0].toLowerCase() : "";
+  const fileName = getDisplayFileName(filePath).toLowerCase();
+  return folderName === "nsfw" || fileName.startsWith("nsfw");
+}
+
+function getBackgroundCategory(filePath: string): BackgroundCategory {
+  const parts = filePath.split("/");
+  const folderName = parts.length > 1 ? parts[0].toLowerCase() : "";
+  const fileName = getDisplayFileName(filePath).toLowerCase();
+  const categorySource = folderName || fileName;
+
+  if (categorySource.startsWith("standaard")) {
+    return backgroundCategories[0];
+  }
+
+  if (categorySource.startsWith("intens")) {
+    return backgroundCategories[1];
+  }
+
+  if (categorySource.startsWith("space")) {
+    return backgroundCategories[2];
+  }
+
+  if (categorySource.startsWith("the sun") || categorySource.startsWith("sun")) {
+    return backgroundCategories[3];
+  }
+
+  if (categorySource.startsWith("the moon") || categorySource.startsWith("moon")) {
+    return backgroundCategories[4];
+  }
+
+  if (categorySource.startsWith("the earth") || categorySource.startsWith("earth")) {
+    return backgroundCategories[5];
+  }
+
+  if (categorySource.startsWith("nsfw")) {
+    return backgroundCategories[6];
+  }
+
+  return backgroundCategories[7];
+}
+
 export function ChatShell({
   userName,
   initialThreads,
@@ -155,11 +254,13 @@ export function ChatShell({
   const [query, setQuery] = useState("");
   const [messageInput, setMessageInput] = useState("");
   const [settings, setSettings] = useState<SettingsData>(initialSettings);
+  const [assetState, setAssetState] = useState<Assets>(assets);
   const [showSettings, setShowSettings] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [deletingThreadId, setDeletingThreadId] = useState<string | null>(null);
   const [showIntroOverlay, setShowIntroOverlay] = useState(true);
+  const [introPlaybackBlocked, setIntroPlaybackBlocked] = useState(false);
   const [showNsfwVerifyModal, setShowNsfwVerifyModal] = useState(false);
   const [saveState, setSaveState] = useState<"idle" | "saved">("idle");
   const [settingsError, setSettingsError] = useState<string | null>(null);
@@ -171,9 +272,16 @@ export function ChatShell({
   const [nsfwCameraReady, setNsfwCameraReady] = useState(false);
   const [nsfwLiveFaceDetected, setNsfwLiveFaceDetected] = useState(false);
   const [nsfwDetectedFacesCount, setNsfwDetectedFacesCount] = useState(0);
+  const [nsfwCameraDevices, setNsfwCameraDevices] = useState<MediaDeviceInfo[]>([]);
+  const [nsfwSelectedCameraId, setNsfwSelectedCameraId] = useState("");
   const [backgroundFilter, setBackgroundFilter] = useState("");
+  const [loginBackgroundFilter, setLoginBackgroundFilter] = useState("");
+  const [backgroundCategoryFilter, setBackgroundCategoryFilter] = useState<string>("all");
+  const [settingsSearch, setSettingsSearch] = useState("");
   const [introSoundFilter, setIntroSoundFilter] = useState("");
+  const [introSoundCategoryFilter, setIntroSoundCategoryFilter] = useState<"all" | "short" | "long">("all");
   const [backgroundSoundFilter, setBackgroundSoundFilter] = useState("");
+  const [introSoundDurations, setIntroSoundDurations] = useState<Record<string, number | null>>({});
 
   const introAudioRef = useRef<HTMLAudioElement | null>(null);
   const bgAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -189,43 +297,195 @@ export function ChatShell({
   const t = useMemo(() => getDictionary(settings.language), [settings.language]);
   const palette = themeStyles[settings.theme];
 
-  const backgroundImageUrl = settings.backgroundImage
-    ? `/backgrounds/${encodeAssetPath(settings.backgroundImage)}`
+  const selectedBackgroundImage =
+    settings.backgroundImage && (!isNsfwBackground(settings.backgroundImage) || settings.nsfwPlusEnabled)
+      ? settings.backgroundImage
+      : null;
+  const backgroundImageUrl = selectedBackgroundImage
+    ? `/backgrounds/${encodeAssetPath(selectedBackgroundImage)}`
     : null;
-  const introLogoUrl = `/intro-assets/${encodeAssetPath("saartje kalebassen.ico")}`;
+  const introLogoUrl = "/intro-assets/feline%20kalebassen.jpg";
+  const settingsQuery = settingsSearch.trim().toLowerCase();
+
+  useEffect(() => {
+    setDocumentIcon(introLogoUrl);
+  }, [introLogoUrl]);
+
+  const allowedBackgrounds = useMemo(() => {
+    if (settings.nsfwPlusEnabled) {
+      return assetState.backgrounds;
+    }
+
+    return assetState.backgrounds.filter((file) => !isNsfwBackground(file));
+  }, [assetState.backgrounds, settings.nsfwPlusEnabled]);
 
   const filteredBackgrounds = useMemo(() => {
-    const queryText = backgroundFilter.trim().toLowerCase();
-    const result = assets.backgrounds.filter((file) => file.toLowerCase().includes(queryText));
+    const queryText = `${backgroundFilter} ${settingsQuery}`.trim().toLowerCase();
+    const result = allowedBackgrounds.filter((file) => file.toLowerCase().includes(queryText));
 
-    if (settings.backgroundImage && !result.includes(settings.backgroundImage)) {
+    if (
+      settings.backgroundImage &&
+      (!isNsfwBackground(settings.backgroundImage) || settings.nsfwPlusEnabled) &&
+      !result.includes(settings.backgroundImage)
+    ) {
       return [settings.backgroundImage, ...result];
     }
 
     return result;
-  }, [assets.backgrounds, backgroundFilter, settings.backgroundImage]);
+  }, [allowedBackgrounds, backgroundFilter, settings.backgroundImage, settings.nsfwPlusEnabled, settingsQuery]);
+
+  const filteredLoginBackgrounds = useMemo(() => {
+    const queryText = `${loginBackgroundFilter} ${settingsQuery}`.trim().toLowerCase();
+    const result = assetState.loginBackgrounds.filter((file) => file.toLowerCase().includes(queryText));
+
+    if (settings.loginBackground && !result.includes(settings.loginBackground)) {
+      return [settings.loginBackground, ...result];
+    }
+
+    return result;
+  }, [assetState.loginBackgrounds, loginBackgroundFilter, settings.loginBackground, settingsQuery]);
+
+  const visibleBackgrounds = useMemo(() => {
+    const activeBackgroundCategoryFilter =
+      !settings.nsfwPlusEnabled && backgroundCategoryFilter === "nsfw" ? "all" : backgroundCategoryFilter;
+
+    if (activeBackgroundCategoryFilter === "all") {
+      return filteredBackgrounds;
+    }
+
+    return filteredBackgrounds.filter((file) => getBackgroundCategory(file).key === activeBackgroundCategoryFilter);
+  }, [backgroundCategoryFilter, filteredBackgrounds, settings.nsfwPlusEnabled]);
+
+  const visibleBackgroundCategories = useMemo(
+    () => backgroundCategories.filter((category) => category.key !== "nsfw" || settings.nsfwPlusEnabled),
+    [settings.nsfwPlusEnabled],
+  );
+
+  const backgroundSections = useMemo(() => {
+    const sectionMap = new Map<string, { label: string; order: number; files: string[] }>();
+
+    for (const file of visibleBackgrounds) {
+      const category = getBackgroundCategory(file);
+      const existing = sectionMap.get(category.key);
+
+      if (existing) {
+        existing.files.push(file);
+        continue;
+      }
+
+      sectionMap.set(category.key, {
+        label: category.label,
+        order: category.order,
+        files: [file],
+      });
+    }
+
+    return Array.from(sectionMap.values())
+      .sort((a, b) => a.order - b.order || a.label.localeCompare(b.label))
+      .filter((section) => section.files.length > 0);
+  }, [visibleBackgrounds]);
+
+  const selectedLoginBackground = useMemo(
+    () =>
+      settings.loginBackground && !LEGACY_LOGIN_BACKGROUND_VALUES.has(settings.loginBackground)
+        ? settings.loginBackground
+        : "Standaard.mp4",
+    [settings.loginBackground],
+  );
 
   const filteredIntroSounds = useMemo(() => {
-    const queryText = introSoundFilter.trim().toLowerCase();
-    const result = assets.introSounds.filter((file) => file.toLowerCase().includes(queryText));
+    const queryText = `${introSoundFilter} ${settingsQuery}`.trim().toLowerCase();
+    const result = assetState.introSounds.filter((file) => file.toLowerCase().includes(queryText));
 
     if (settings.introSound && !result.includes(settings.introSound)) {
       return [settings.introSound, ...result];
     }
 
     return result;
-  }, [assets.introSounds, introSoundFilter, settings.introSound]);
+  }, [assetState.introSounds, introSoundFilter, settings.introSound, settingsQuery]);
+
+  const visibleIntroSounds = useMemo(() => {
+    const bucketed = filteredIntroSounds.filter((file) => {
+      const duration = introSoundDurations[file];
+
+      if (introSoundCategoryFilter === "short") {
+        return typeof duration !== "number" || duration <= MAX_INTRO_SOUND_SECONDS;
+      }
+
+      if (introSoundCategoryFilter === "long") {
+        return typeof duration === "number" && duration > MAX_INTRO_SOUND_SECONDS;
+      }
+
+      return true;
+    });
+
+    if (settings.introSound && !bucketed.includes(settings.introSound)) {
+      return [settings.introSound, ...bucketed];
+    }
+
+    return bucketed;
+  }, [filteredIntroSounds, introSoundCategoryFilter, introSoundDurations, settings.introSound]);
 
   const filteredBackgroundSounds = useMemo(() => {
-    const queryText = backgroundSoundFilter.trim().toLowerCase();
-    const result = assets.backgroundSounds.filter((file) => file.toLowerCase().includes(queryText));
+    const queryText = `${backgroundSoundFilter} ${settingsQuery}`.trim().toLowerCase();
+    const result = assetState.backgroundSounds.filter((file) => file.toLowerCase().includes(queryText));
 
     if (settings.backgroundSound && !result.includes(settings.backgroundSound)) {
       return [settings.backgroundSound, ...result];
     }
 
     return result;
-  }, [assets.backgroundSounds, backgroundSoundFilter, settings.backgroundSound]);
+  }, [assetState.backgroundSounds, backgroundSoundFilter, settings.backgroundSound, settingsQuery]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const missingIntroSounds = assetState.introSounds.filter((file) => introSoundDurations[file] === undefined);
+    if (missingIntroSounds.length === 0) {
+      return undefined;
+    }
+
+    for (const file of missingIntroSounds) {
+      const audio = document.createElement("audio");
+      audio.preload = "metadata";
+      audio.src = `/intro-music/${encodeAssetPath(file)}`;
+
+      const handleLoaded = () => {
+        if (cancelled) return;
+        setIntroSoundDurations((prev) => (prev[file] === undefined ? { ...prev, [file]: audio.duration } : prev));
+      };
+
+      const handleError = () => {
+        if (cancelled) return;
+        setIntroSoundDurations((prev) => (prev[file] === undefined ? { ...prev, [file]: null } : prev));
+      };
+
+      audio.addEventListener("loadedmetadata", handleLoaded, { once: true });
+      audio.addEventListener("error", handleError, { once: true });
+      audio.load();
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [assetState.introSounds, introSoundDurations]);
+
+  const playIntroAudio = useCallback(async () => {
+    const introAudio = introAudioRef.current;
+    if (!settings.introSound || !introAudio) {
+      return false;
+    }
+
+    try {
+      introAudio.currentTime = 0;
+      await introAudio.play();
+      setIntroPlaybackBlocked(false);
+      return true;
+    } catch {
+      setIntroPlaybackBlocked(true);
+      return false;
+    }
+  }, [settings.introSound]);
 
   useEffect(() => {
     document.documentElement.lang = settings.language.toLowerCase();
@@ -260,8 +520,8 @@ export function ChatShell({
     if (settings.introSound && introAudio) {
       handleEnded = () => finishIntro();
       introAudio.addEventListener("ended", handleEnded);
-      introAudio.currentTime = 0;
-      void introAudio.play().catch(() => {
+      introAudio.preload = "auto";
+      void playIntroAudio().catch(() => {
         window.setTimeout(finishIntro, 1400);
       });
     }
@@ -273,7 +533,7 @@ export function ChatShell({
         introAudio.removeEventListener("ended", handleEnded);
       }
     };
-  }, [settings.introSound]);
+  }, [playIntroAudio, settings.introSound]);
 
   useEffect(() => {
     if (!introPreviewInitRef.current) {
@@ -285,11 +545,10 @@ export function ChatShell({
       return;
     }
 
-    introAudioRef.current.currentTime = 0;
-    void introAudioRef.current.play().catch(() => {
+    void playIntroAudio().catch(() => {
       // Browsers can block autoplay. This is safe to ignore.
     });
-  }, [settings.introSound]);
+  }, [playIntroAudio, settings.introSound]);
 
   useEffect(() => {
     if (!bgAudioRef.current) {
@@ -306,6 +565,26 @@ export function ChatShell({
       // Browsers can block autoplay. This is safe to ignore.
     });
   }, [settings.backgroundSound]);
+
+  const refreshAssets = useCallback(async () => {
+    try {
+      const response = await fetch("/api/settings", {
+        method: "GET",
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        return;
+      }
+
+      const payload = (await response.json()) as { assets?: Assets };
+      if (payload.assets) {
+        setAssetState(payload.assets);
+      }
+    } catch {
+      // Keep existing lists if refresh fails.
+    }
+  }, []);
 
   const ensureFaceDetector = useCallback((): FaceDetectorLike | null => {
     if (nsfwFaceDetectorRef.current) {
@@ -364,8 +643,19 @@ export function ChatShell({
       }
 
       try {
+        const usePreferredCamera = Boolean(nsfwSelectedCameraId);
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
+          video: usePreferredCamera
+            ? {
+                deviceId: { exact: nsfwSelectedCameraId },
+                width: { ideal: 1280 },
+                height: { ideal: 720 },
+              }
+            : {
+                facingMode: "user",
+                width: { ideal: 1280 },
+                height: { ideal: 720 },
+              },
           audio: false,
         });
 
@@ -384,6 +674,24 @@ export function ChatShell({
           });
         }
         setNsfwCameraReady(true);
+
+        const videoTrack = stream.getVideoTracks()[0];
+        const currentDeviceId = videoTrack?.getSettings().deviceId ?? nsfwSelectedCameraId;
+        if (currentDeviceId && currentDeviceId !== nsfwSelectedCameraId) {
+          setNsfwSelectedCameraId(currentDeviceId);
+        }
+
+        if (navigator.mediaDevices?.enumerateDevices) {
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          if (!cancelled) {
+            const videoDevices = devices.filter((device) => device.kind === "videoinput");
+            setNsfwCameraDevices(videoDevices);
+
+            if (!nsfwSelectedCameraId && currentDeviceId) {
+              setNsfwSelectedCameraId(currentDeviceId);
+            }
+          }
+        }
 
         if (canDetectFaces) {
           detectIntervalId = window.setInterval(async () => {
@@ -415,6 +723,35 @@ export function ChatShell({
           setNsfwVerifyError(null);
         }
       } catch {
+        if (nsfwSelectedCameraId) {
+          try {
+            const fallbackStream = await navigator.mediaDevices.getUserMedia({
+              video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
+              audio: false,
+            });
+
+            if (cancelled) {
+              for (const track of fallbackStream.getTracks()) {
+                track.stop();
+              }
+              return;
+            }
+
+            nsfwStreamRef.current = fallbackStream;
+            if (nsfwVideoRef.current) {
+              nsfwVideoRef.current.srcObject = fallbackStream;
+              await nsfwVideoRef.current.play().catch(() => {
+                // Some browsers require user interaction before play.
+              });
+            }
+            setNsfwSelectedCameraId("");
+            setNsfwCameraReady(true);
+            setNsfwVerifyError("Gekozen camera niet beschikbaar, standaardcamera gebruikt.");
+            return;
+          } catch {
+            // Fall through to generic error below.
+          }
+        }
         setNsfwVerifyError("Ik krijg geen toegang tot je camera voor gezichtsverificatie.");
       }
     }
@@ -434,7 +771,7 @@ export function ChatShell({
         nsfwStreamRef.current = null;
       }
     };
-  }, [detectFacesFromCanvas, ensureFaceDetector, showNsfwVerifyModal]);
+  }, [detectFacesFromCanvas, ensureFaceDetector, nsfwSelectedCameraId, showNsfwVerifyModal]);
 
   useEffect(() => {
     const handle = setTimeout(async () => {
@@ -473,13 +810,14 @@ export function ChatShell({
     }
 
     const payload = (await response.json()) as {
-      thread: { id: string; title: string; updatedAt: string };
+      thread: { id: string; title: string; updatedAt: string; isNsfw: boolean };
     };
 
     const nextThread: ThreadSummary = {
       id: payload.thread.id,
       title: payload.thread.title,
       updatedAt: payload.thread.updatedAt,
+      isNsfw: payload.thread.isNsfw,
       preview: "",
     };
 
@@ -494,6 +832,15 @@ export function ChatShell({
     if (!response.ok) return;
     const payload = (await response.json()) as { threads: ThreadSummary[] };
     setThreads(payload.threads);
+    const nextSelected = payload.threads.find((thread) => thread.id === selectedThreadId) ?? payload.threads[0] ?? null;
+
+    if (nextSelected) {
+      setSelectedThreadId(nextSelected.id);
+      await loadThread(nextSelected.id);
+    } else {
+      setSelectedThreadId(null);
+      setMessages([]);
+    }
   }
 
   async function deleteThread(threadId: string) {
@@ -569,9 +916,19 @@ export function ChatShell({
     setIsSending(false);
   }
 
-  async function saveSettings() {
+  async function saveSettings(snapshot: SettingsData = settings) {
     setIsSaving(true);
     setSettingsError(null);
+    const nsfwModeChanged = snapshot.nsfwPlusEnabled !== settings.nsfwPlusEnabled;
+
+    if (snapshot.introSound) {
+      const introDuration = introSoundDurations[snapshot.introSound];
+      if (typeof introDuration === "number" && introDuration > MAX_INTRO_SOUND_SECONDS) {
+        setSettingsError(`Intro sound mag maximaal ${MAX_INTRO_SOUND_SECONDS} seconden zijn.`);
+        setIsSaving(false);
+        return;
+      }
+    }
 
     const response = await fetch("/api/settings", {
       method: "PUT",
@@ -579,15 +936,19 @@ export function ChatShell({
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        ...settings,
+        ...snapshot,
         nsfwBirthDateCheck,
         nsfwFaceVerified,
       }),
     });
 
     if (response.ok) {
+      storeLoginBackground(snapshot.loginBackground ?? "Standaard.mp4");
+      if (nsfwModeChanged) {
+        await refreshThreads();
+      }
       setSaveState("saved");
-      if (!settings.nsfwPlusEnabled) {
+      if (!snapshot.nsfwPlusEnabled) {
         setNsfwBirthDateCheck("");
         setNsfwFaceVerified(false);
         setNsfwSelfieDataUrl(null);
@@ -610,6 +971,8 @@ export function ChatShell({
     setNsfwFaceDetectionAvailable(false);
     setNsfwLiveFaceDetected(false);
     setNsfwDetectedFacesCount(0);
+    setNsfwCameraDevices([]);
+    setNsfwSelectedCameraId("");
     setShowNsfwVerifyModal(true);
   }
 
@@ -623,6 +986,8 @@ export function ChatShell({
     setNsfwFaceDetectionAvailable(false);
     setNsfwLiveFaceDetected(false);
     setNsfwDetectedFacesCount(0);
+    setNsfwCameraDevices([]);
+    setNsfwSelectedCameraId("");
   }
 
   async function captureNsfwSelfie() {
@@ -711,35 +1076,40 @@ export function ChatShell({
         <div className="absolute inset-0 z-40 grid place-items-center bg-black/55 backdrop-blur-sm">
           <div className="flex flex-col items-center gap-4 rounded-3xl bg-black/45 px-8 py-7 text-white">
             <div className="relative h-28 w-28 overflow-hidden rounded-2xl border border-white/30">
-              <Image src={introLogoUrl} alt="Saartje intro" fill sizes="112px" className="object-cover" />
+              <Image src={introLogoUrl} alt="Feline intro" fill sizes="112px" className="object-cover" />
             </div>
-            <p className="font-title text-2xl">Saartje wordt wakker...</p>
-            <div className="saartje-typing text-white">
+            <p className="font-title text-2xl">Feline wordt wakker...</p>
+            <div className="feline-typing text-white">
               <span />
               <span />
               <span />
             </div>
+            {introPlaybackBlocked && settings.introSound && (
+              <button
+                type="button"
+                onClick={() => {
+                  void playIntroAudio();
+                }}
+                className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-black transition hover:scale-[1.02]"
+              >
+                Speel intro af
+              </button>
+            )}
           </div>
         </div>
       )}
 
       <div className="relative mx-auto grid min-h-screen max-w-[1500px] grid-cols-1 gap-3 p-3 lg:grid-cols-[300px_1fr]">
         <aside
-          className={`saartje-rise rounded-3xl p-4 ${palette.sidebar}`}
+          className={`feline-rise rounded-3xl p-4 ${palette.sidebar}`}
           style={{ animationDelay: "40ms" }}
         >
           <div className="flex items-center gap-3">
             <div className="relative h-11 w-11 overflow-hidden rounded-xl border border-white/25 bg-white/10">
-              <Image
-                src={introLogoUrl}
-                alt="Saartje logo"
-                fill
-                sizes="44px"
-                className="object-cover"
-              />
+              <Image src={introLogoUrl} alt="Feline logo" fill sizes="44px" className="object-contain" unoptimized />
             </div>
             <div>
-              <h1 className="font-title text-2xl leading-tight">Saartje AI</h1>
+              <h1 className="font-title text-2xl leading-tight">Feline AI</h1>
               <p className="truncate text-xs text-white/70">{userName ?? "Gebruiker"}</p>
             </div>
           </div>
@@ -819,7 +1189,7 @@ export function ChatShell({
         </aside>
 
         <section
-          className={`relative saartje-rise flex min-h-[88vh] flex-col rounded-3xl ${palette.panel}`}
+          className={`relative feline-rise flex min-h-[88vh] flex-col rounded-3xl ${palette.panel}`}
           style={{ animationDelay: "100ms" }}
         >
           <header className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
@@ -831,7 +1201,13 @@ export function ChatShell({
             <div className="flex gap-2">
               <button
                 type="button"
-                onClick={() => setShowSettings((prev) => !prev)}
+                onClick={() => {
+                  const next = !showSettings;
+                  if (next) {
+                    void refreshAssets();
+                  }
+                  setShowSettings(next);
+                }}
                 aria-label={t.settings}
                 title={t.settings}
                 className="grid h-11 w-11 place-items-center rounded-full bg-white/75 text-black transition hover:scale-[1.03]"
@@ -864,7 +1240,7 @@ export function ChatShell({
                 return (
                   <article
                     key={message.id}
-                    className={`saartje-rise flex ${isUser ? "justify-end" : "justify-start"}`}
+                    className={`feline-rise flex ${isUser ? "justify-end" : "justify-start"}`}
                     style={{ animationDelay: `${Math.min(index * 45, 320)}ms` }}
                   >
                     <div
@@ -882,9 +1258,9 @@ export function ChatShell({
               })}
 
               {isSending && (
-                <article className="saartje-rise flex justify-start" style={{ animationDelay: "90ms" }}>
+                <article className="feline-rise flex justify-start" style={{ animationDelay: "90ms" }}>
                   <div className={`rounded-2xl border px-4 py-3 shadow-md ${palette.assistantBubble}`}>
-                    <div className="saartje-typing">
+                    <div className="feline-typing">
                       <span />
                       <span />
                       <span />
@@ -932,8 +1308,26 @@ export function ChatShell({
                 onClick={() => setShowSettings(false)}
                 aria-label="Close settings backdrop"
               />
-              <aside className="fixed inset-x-4 bottom-4 top-4 z-50 ml-auto w-[calc(100%-2rem)] max-w-md overflow-y-auto overscroll-contain rounded-2xl border border-black/15 bg-white/96 p-4 shadow-2xl saartje-rise touch-pan-y">
-                <h3 className="font-title text-2xl">{t.settings}</h3>
+              <aside className="fixed inset-x-4 bottom-4 top-4 z-50 ml-auto w-[calc(100%-2rem)] max-w-md overflow-y-auto overscroll-contain rounded-2xl border border-black/15 bg-white/96 p-4 shadow-2xl feline-rise touch-pan-y">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <h3 className="font-title text-2xl">{t.settings}</h3>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void refreshAssets();
+                    }}
+                    className="rounded-lg border border-black/15 px-3 py-2 text-xs font-semibold hover:bg-black/5"
+                  >
+                    Mappen vernieuwen
+                  </button>
+                </div>
+
+                <input
+                  value={settingsSearch}
+                  onChange={(event) => setSettingsSearch(event.target.value)}
+                  placeholder="Zoek in instellingen..."
+                  className="mb-3 w-full rounded-lg border border-black/15 bg-white px-3 py-2 text-sm"
+                />
 
                 <div className="mt-3 grid gap-3">
                   <label className="text-sm">
@@ -983,14 +1377,44 @@ export function ChatShell({
                       placeholder={t.searchFiles}
                       className="mb-2 w-full rounded-lg border border-black/15 bg-white px-2 py-2"
                     />
+                    <div className="mb-2 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setBackgroundCategoryFilter("all")}
+                        className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                          backgroundCategoryFilter === "all"
+                            ? "border-black/40 bg-black/10"
+                            : "border-black/15 bg-white hover:bg-black/5"
+                        }`}
+                      >
+                        Alle
+                      </button>
+                      {visibleBackgroundCategories
+                        .filter((category) => category.key !== "overig" || filteredBackgrounds.length > 0)
+                        .map((category) => (
+                          <button
+                            key={category.key}
+                            type="button"
+                            onClick={() => setBackgroundCategoryFilter(category.key)}
+                            className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                              backgroundCategoryFilter === category.key
+                                ? "border-black/40 bg-black/10"
+                                : "border-black/15 bg-white hover:bg-black/5"
+                            }`}
+                          >
+                            {category.label}
+                          </button>
+                        ))}
+                    </div>
                     <div className="max-h-72 overflow-y-auto rounded-lg border border-black/15 bg-white p-2">
                       <button
                         type="button"
                         onClick={() =>
-                          setSettings((prev) => ({
-                            ...prev,
-                            backgroundImage: null,
-                          }))
+                          {
+                            const next = { ...settings, backgroundImage: null };
+                            setSettings(next);
+                            void saveSettings(next);
+                          }
                         }
                         className={`mb-2 flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm transition ${
                           settings.backgroundImage === null
@@ -1002,19 +1426,101 @@ export function ChatShell({
                         {settings.backgroundImage === null && <span className="text-xs font-semibold">Gekozen</span>}
                       </button>
 
+                      <div className="space-y-4">
+                        {backgroundSections.map((section) => (
+                          <div key={section.label} className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-black/55">
+                                {section.label}
+                              </p>
+                              <span className="text-xs text-black/50">{section.files.length}</span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                              {section.files.map((file) => {
+                                const selected = settings.backgroundImage === file;
+                                return (
+                            <button
+                              key={file}
+                              type="button"
+                              onClick={() => {
+                                const next = { ...settings, backgroundImage: file };
+                                setSettings(next);
+                                void saveSettings(next);
+                              }}
+                                    className={`overflow-hidden rounded-lg border text-left transition ${
+                                      selected
+                                        ? "border-black/45 bg-black/8 ring-2 ring-black/20"
+                                        : "border-black/15 bg-white hover:border-black/30"
+                                    }`}
+                                    title={file}
+                                  >
+                                    <div className="relative aspect-video w-full">
+                                      <Image
+                                        src={`/backgrounds/${encodeAssetPath(file)}`}
+                                        alt={getDisplayFileName(file)}
+                                        fill
+                                        sizes="(max-width: 640px) 45vw, 180px"
+                                        className="object-cover"
+                                      />
+                                    </div>
+                                    <div className="px-2 py-1.5">
+                                      <p className="truncate text-[11px] font-medium leading-4">
+                                        {getDisplayFileName(file)}
+                                      </p>
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <span className="mt-1 block text-xs text-black/60">
+                      {visibleBackgrounds.length} / {allowedBackgrounds.length}
+                    </span>
+                  </label>
+
+                  <label className="text-sm">
+                    <span className="mb-1 block font-semibold">Inlog achtergrond</span>
+                    <input
+                      value={loginBackgroundFilter}
+                      onChange={(event) => setLoginBackgroundFilter(event.target.value)}
+                      placeholder={t.searchFiles}
+                      className="mb-2 w-full rounded-lg border border-black/15 bg-white px-2 py-2"
+                    />
+                    <div className="max-h-72 overflow-y-auto rounded-lg border border-black/15 bg-white p-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          {
+                            const next = { ...settings, loginBackground: null };
+                            setSettings(next);
+                            void saveSettings(next);
+                          }
+                        }
+                        className={`mb-2 flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm transition ${
+                          settings.loginBackground === null
+                            ? "border-black/40 bg-black/10"
+                            : "border-black/15 bg-white hover:bg-black/5"
+                        }`}
+                      >
+                        <span>Standaard ({selectedLoginBackground})</span>
+                        {settings.loginBackground === null && <span className="text-xs font-semibold">Gekozen</span>}
+                      </button>
+
                       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                        {filteredBackgrounds.map((file) => {
-                          const selected = settings.backgroundImage === file;
+                        {filteredLoginBackgrounds.map((file) => {
+                          const selected = selectedLoginBackground === file;
                           return (
                             <button
                               key={file}
                               type="button"
-                              onClick={() =>
-                                setSettings((prev) => ({
-                                  ...prev,
-                                  backgroundImage: file,
-                                }))
-                              }
+                              onClick={() => {
+                                const next = { ...settings, loginBackground: file };
+                                setSettings(next);
+                                void saveSettings(next);
+                              }}
                               className={`overflow-hidden rounded-lg border text-left transition ${
                                 selected
                                   ? "border-black/45 bg-black/8 ring-2 ring-black/20"
@@ -1022,14 +1528,23 @@ export function ChatShell({
                               }`}
                               title={file}
                             >
-                              <div className="relative aspect-video w-full">
-                                <Image
-                                  src={`/backgrounds/${encodeAssetPath(file)}`}
-                                  alt={getDisplayFileName(file)}
-                                  fill
-                                  sizes="(max-width: 640px) 45vw, 180px"
-                                  className="object-cover"
-                                />
+                              <div className="relative aspect-video w-full bg-black/5">
+                                {isVideoFile(file) ? (
+                                  <video className="h-full w-full object-cover" muted playsInline preload="metadata">
+                                    <source
+                                      src={`/inlog-background/${encodeAssetPath(file)}`}
+                                      type={getVideoMimeType(file)}
+                                    />
+                                  </video>
+                                ) : (
+                                  <Image
+                                    src={`/inlog-background/${encodeAssetPath(file)}`}
+                                    alt={getDisplayFileName(file)}
+                                    fill
+                                    sizes="(max-width: 640px) 45vw, 180px"
+                                    className="object-cover"
+                                  />
+                                )}
                               </div>
                               <div className="px-2 py-1.5">
                                 <p className="truncate text-[11px] font-medium leading-4">
@@ -1042,7 +1557,7 @@ export function ChatShell({
                       </div>
                     </div>
                     <span className="mt-1 block text-xs text-black/60">
-                      {filteredBackgrounds.length} / {assets.backgrounds.length}
+                      {filteredLoginBackgrounds.length} / {assetState.loginBackgrounds.length}
                     </span>
                   </label>
 
@@ -1055,13 +1570,49 @@ export function ChatShell({
                       className="mb-2 w-full rounded-lg border border-black/15 bg-white px-2 py-2"
                     />
                     <div className="max-h-56 overflow-y-auto rounded-lg border border-black/15 bg-white p-2">
+                      <div className="mb-2 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setIntroSoundCategoryFilter("all")}
+                          className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                            introSoundCategoryFilter === "all"
+                              ? "border-black/40 bg-black/10"
+                              : "border-black/15 bg-white hover:bg-black/5"
+                          }`}
+                        >
+                          Alle
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIntroSoundCategoryFilter("short")}
+                          className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                            introSoundCategoryFilter === "short"
+                              ? "border-black/40 bg-black/10"
+                              : "border-black/15 bg-white hover:bg-black/5"
+                          }`}
+                        >
+                          Kort
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIntroSoundCategoryFilter("long")}
+                          className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                            introSoundCategoryFilter === "long"
+                              ? "border-black/40 bg-black/10"
+                              : "border-black/15 bg-white hover:bg-black/5"
+                          }`}
+                        >
+                          Te lang
+                        </button>
+                      </div>
                       <button
                         type="button"
                         onClick={() =>
-                          setSettings((prev) => ({
-                            ...prev,
-                            introSound: null,
-                          }))
+                          {
+                            const next = { ...settings, introSound: null };
+                            setSettings(next);
+                            void saveSettings(next);
+                          }
                         }
                         className={`mb-2 flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm transition ${
                           settings.introSound === null
@@ -1074,34 +1625,49 @@ export function ChatShell({
                       </button>
 
                       <div className="space-y-2">
-                        {filteredIntroSounds.map((file) => {
+                        {visibleIntroSounds.map((file) => {
                           const selected = settings.introSound === file;
+                          const duration = introSoundDurations[file];
+                          const tooLong = typeof duration === "number" && duration > MAX_INTRO_SOUND_SECONDS;
                           return (
                             <button
                               key={file}
                               type="button"
-                              onClick={() =>
-                                setSettings((prev) => ({
-                                  ...prev,
-                                  introSound: file,
-                                }))
-                              }
+                              disabled={tooLong}
+                              onClick={() => {
+                                if (tooLong) {
+                                  return;
+                                }
+                                const next = { ...settings, introSound: file };
+                                setSettings(next);
+                                void saveSettings(next);
+                              }}
                               className={`flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm transition ${
                                 selected
                                   ? "border-black/40 bg-black/10"
                                   : "border-black/15 bg-white hover:bg-black/5"
-                              }`}
+                              } ${tooLong ? "cursor-not-allowed opacity-55" : ""}`}
                               title={file}
                             >
-                              <span className="truncate">{getDisplayFileName(file)}</span>
-                              {selected && <span className="text-xs font-semibold">Gekozen</span>}
+                              <span className="truncate">
+                                {getDisplayFileName(file)}
+                                {typeof duration === "number" ? ` • ${duration.toFixed(1)}s` : ""}
+                              </span>
+                              {tooLong ? (
+                                <span className="text-xs font-semibold text-red-600">Te lang</span>
+                              ) : selected ? (
+                                <span className="text-xs font-semibold">Gekozen</span>
+                              ) : null}
                             </button>
                           );
                         })}
                       </div>
                     </div>
                     <span className="mt-1 block text-xs text-black/60">
-                      {filteredIntroSounds.length} / {assets.introSounds.length}
+                      {visibleIntroSounds.length} / {assetState.introSounds.length}
+                    </span>
+                    <span className="mt-1 block text-xs text-black/55">
+                      Alleen intro-sounds van maximaal {MAX_INTRO_SOUND_SECONDS} seconden zijn toegestaan.
                     </span>
                   </label>
 
@@ -1117,10 +1683,11 @@ export function ChatShell({
                       <button
                         type="button"
                         onClick={() =>
-                          setSettings((prev) => ({
-                            ...prev,
-                            backgroundSound: null,
-                          }))
+                          {
+                            const next = { ...settings, backgroundSound: null };
+                            setSettings(next);
+                            void saveSettings(next);
+                          }
                         }
                         className={`mb-2 flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm transition ${
                           settings.backgroundSound === null
@@ -1141,12 +1708,11 @@ export function ChatShell({
                             <button
                               key={file}
                               type="button"
-                              onClick={() =>
-                                setSettings((prev) => ({
-                                  ...prev,
-                                  backgroundSound: file,
-                                }))
-                              }
+                              onClick={() => {
+                                const next = { ...settings, backgroundSound: file };
+                                setSettings(next);
+                                void saveSettings(next);
+                              }}
                               className={`flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm transition ${
                                 selected
                                   ? "border-black/40 bg-black/10"
@@ -1162,7 +1728,7 @@ export function ChatShell({
                       </div>
                     </div>
                     <span className="mt-1 block text-xs text-black/60">
-                      {filteredBackgroundSounds.length} / {assets.backgroundSounds.length}
+                      {filteredBackgroundSounds.length} / {assetState.backgroundSounds.length}
                     </span>
                   </label>
 
@@ -1294,7 +1860,9 @@ export function ChatShell({
 
                   <button
                     type="button"
-                    onClick={saveSettings}
+                    onClick={() => {
+                      void saveSettings();
+                    }}
                     disabled={isSaving}
                     className="rounded-lg bg-black px-3 py-2 font-semibold text-white"
                   >
@@ -1338,6 +1906,27 @@ export function ChatShell({
 
                   <div className="text-sm">
                     <span className="mb-1 block font-semibold">Gezichtsverificatie</span>
+                    <label className="mb-2 block">
+                      <span className="mb-1 block text-xs font-semibold text-black/70">Camera kiezen</span>
+                      <select
+                        value={nsfwSelectedCameraId}
+                        onChange={(event) => {
+                          setNsfwSelectedCameraId(event.target.value);
+                          setNsfwCameraReady(false);
+                          setNsfwFaceVerified(false);
+                          setNsfwSelfieDataUrl(null);
+                          setNsfwVerifyError(null);
+                        }}
+                        className="w-full rounded-xl border border-black/15 bg-white px-3 py-2 text-sm"
+                      >
+                        <option value="">Standaard camera</option>
+                        {nsfwCameraDevices.map((device, index) => (
+                          <option key={device.deviceId} value={device.deviceId}>
+                            {device.label?.trim() || `Camera ${index + 1}`}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                     <div className="overflow-hidden rounded-2xl border border-black/15 bg-black">
                       {nsfwSelfieDataUrl ? (
                         <Image
@@ -1441,3 +2030,4 @@ export function ChatShell({
     </div>
   );
 }
+

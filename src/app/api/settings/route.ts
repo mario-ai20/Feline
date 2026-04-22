@@ -47,21 +47,23 @@ export async function GET() {
   }
 
   const settings = await ensureUserSettings(currentUser.id);
-  const [backgrounds, introSounds, backgroundSounds] = await Promise.all([
+  const [backgrounds, loginBackgrounds, introSounds, backgroundSounds] = await Promise.all([
     listMediaFiles("backgrounds"),
+    listMediaFiles("inlog-background", { allowVideo: true }),
     listMediaFiles("intro-music"),
     listMediaFiles("background-music"),
   ]);
 
   return NextResponse.json({
-    settings,
-    assets: {
-      backgrounds,
-      introSounds,
-      backgroundSounds,
-    },
-  });
-}
+      settings,
+      assets: {
+        backgrounds,
+        loginBackgrounds,
+        introSounds,
+        backgroundSounds,
+      },
+    });
+  }
 
 export async function PUT(request: Request) {
   const currentUser = await getAuthenticatedUser();
@@ -83,6 +85,10 @@ export async function PUT(request: Request) {
       typeof input.backgroundImage === "string" && input.backgroundImage.length === 0
         ? null
         : (input.backgroundImage as string | null | undefined),
+    loginBackground:
+      typeof input.loginBackground === "string" && input.loginBackground.length === 0
+        ? null
+        : (input.loginBackground as string | null | undefined),
     introSound:
       typeof input.introSound === "string" && input.introSound.length === 0
         ? null

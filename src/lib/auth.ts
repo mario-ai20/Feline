@@ -7,7 +7,7 @@ import { verifyPassword } from "@/lib/password";
 export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
-      name: "Saartje Login",
+      name: "Feline Login",
       credentials: {
         username: { label: "Username", type: "text" },
         password: { label: "Password", type: "password" },

@@ -2,12 +2,12 @@
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Saartje AI",
-  description: "Saartje op Ollama 3.1 met login, chats en instellingen.",
+  title: "Feline AI",
+  description: "Feline op Ollama 3.1 met login, chats en instellingen.",
   icons: {
-    icon: "/intro-assets/saartje%20kalebassen.ico",
-    shortcut: "/intro-assets/saartje%20kalebassen.ico",
-    apple: "/intro-assets/saartje%20kalebassen.jpg",
+    icon: "/intro-assets/feline%20kalebassen.ico",
+    shortcut: "/intro-assets/feline%20kalebassen.ico",
+    apple: "/intro-assets/feline%20kalebassen.jpg",
   },
 };
 

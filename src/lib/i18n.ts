@@ -41,9 +41,9 @@ type Dictionary = {
 
 const dictionaries: Record<UiLanguage, Dictionary> = {
   NL: {
-    appName: "Saartje",
-    signInTitle: "Welkom bij Saartje",
-    signInDesc: "Log in met Google of GitHub om je chats en instellingen te bewaren.",
+    appName: "Feline",
+    signInTitle: "Welkom bij Feline",
+    signInDesc: "Log in of maak een account aan om je chats en instellingen te bewaren.",
     signInGoogle: "Inloggen met Google",
     signInGithub: "Inloggen met GitHub",
     providerMissing: "OAuth providers zijn nog niet geconfigureerd in .env.",
@@ -87,9 +87,9 @@ const dictionaries: Record<UiLanguage, Dictionary> = {
     },
   },
   FR: {
-    appName: "Saartje",
-    signInTitle: "Bienvenue sur Saartje",
-    signInDesc: "Connectez-vous avec Google ou GitHub pour sauvegarder vos discussions.",
+    appName: "Feline",
+    signInTitle: "Bienvenue sur Feline",
+    signInDesc: "Connectez-vous ou créez un compte pour sauvegarder vos discussions.",
     signInGoogle: "Connexion avec Google",
     signInGithub: "Connexion avec GitHub",
     providerMissing: "Les providers OAuth ne sont pas encore configurés dans .env.",
@@ -133,9 +133,9 @@ const dictionaries: Record<UiLanguage, Dictionary> = {
     },
   },
   DE: {
-    appName: "Saartje",
-    signInTitle: "Willkommen bei Saartje",
-    signInDesc: "Melde dich mit Google oder GitHub an, um Chats zu speichern.",
+    appName: "Feline",
+    signInTitle: "Willkommen bei Feline",
+    signInDesc: "Melde dich an oder erstelle ein Konto, um Chats zu speichern.",
     signInGoogle: "Mit Google anmelden",
     signInGithub: "Mit GitHub anmelden",
     providerMissing: "OAuth-Provider sind in .env noch nicht konfiguriert.",
@@ -179,9 +179,9 @@ const dictionaries: Record<UiLanguage, Dictionary> = {
     },
   },
   EL: {
-    appName: "Saartje",
-    signInTitle: "?a??? ???e? st? Saartje",
-    signInDesc: "S??des? µe Google ? GitHub ??a ap????e?s? s???µ?????.",
+    appName: "Feline",
+    signInTitle: "?a??? ???e? st? Feline",
+    signInDesc: "S??des? ? d?µio????se ??a l???? t?? s???µ???se?? s??.",
     signInGoogle: "S??des? µe Google",
     signInGithub: "S??des? µe GitHub",
     providerMissing: "?? OAuth providers de? ????? ???ste? a??µ? st? .env.",
@@ -265,7 +265,7 @@ export function buildSystemPrompt(settings: Pick<UserSettings, "language" | "per
     : "Geen expliciet seksuele details.";
 
   return [
-    "Je bent Saartje, een behulpzame AI-assistent.",
+    "Je bent Feline, een behulpzame AI-assistent.",
     `Antwoord consequent in ${languageName}.`,
     "Praat warm, spontaan en menselijk, alsof je een echt persoon bent in een normaal gesprek.",
     "Gebruik natuurlijke zinnen met emotie en nuance, maar blijf helder en niet overdreven.",

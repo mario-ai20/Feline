@@ -8,27 +8,27 @@ export const allowedLanguages = Object.values(Language);
 export const allowedAgeModes = Object.values(AgeMode);
 
 function backgroundSortPriority(filePath: string): number {
-  const fileName = filePath.split("/").pop()?.toLowerCase() ?? filePath.toLowerCase();
+  const parts = filePath.split("/");
+  const folderName = parts.length > 1 ? parts[0].toLowerCase() : "";
+  const fileName = parts[parts.length - 1]?.toLowerCase() ?? filePath.toLowerCase();
+  const categorySource = folderName || fileName;
 
   const orderedMatchers: Array<{ rank: number; pattern: RegExp }> = [
-    { rank: 0, pattern: /^standaard\./i },
-    { rank: 10, pattern: /^blue intens\./i },
-    { rank: 11, pattern: /^green intens\./i },
-    { rank: 12, pattern: /^orange intens\./i },
-    { rank: 13, pattern: /^pink intens\./i },
-    { rank: 14, pattern: /^intens\./i },
-    { rank: 20, pattern: /^the sun\./i },
-    { rank: 21, pattern: /^the moon\./i },
-    { rank: 22, pattern: /^the earth\./i },
+    { rank: 0, pattern: /^standaard/i },
+    { rank: 10, pattern: /^intens/i },
+    { rank: 20, pattern: /^(the sun|sun)/i },
+    { rank: 21, pattern: /^(the moon|moon)/i },
+    { rank: 22, pattern: /^(the earth|earth)/i },
+    { rank: 90, pattern: /^nsfw/i },
   ];
 
-  const match = orderedMatchers.find((entry) => entry.pattern.test(fileName));
+  const match = orderedMatchers.find((entry) => entry.pattern.test(categorySource));
   if (match) {
     return match.rank;
   }
 
   // Space-achtergronden en overige bestanden komen na standaard/kleuren/planeten.
-  if (/^space/i.test(fileName)) {
+  if (/^space/i.test(categorySource)) {
     return 30;
   }
 
@@ -48,8 +48,12 @@ export async function ensureUserSettings(userId: string): Promise<UserSettings> 
   });
 }
 
-export async function listMediaFiles(dirFromPublic: string): Promise<string[]> {
+export async function listMediaFiles(
+  dirFromPublic: string,
+  options?: { allowVideo?: boolean },
+): Promise<string[]> {
   const fullDir = path.join(process.cwd(), "public", dirFromPublic);
+  const allowVideo = options?.allowVideo === true;
 
   try {
     const allFiles: string[] = [];
@@ -68,7 +72,11 @@ export async function listMediaFiles(dirFromPublic: string): Promise<string[]> {
           continue;
         }
 
-        if (entry.isFile() && /\.(mp3|wav|ogg|m4a|aac|flac|jpg|jpeg|png|webp)$/i.test(entry.name)) {
+        if (
+          entry.isFile() &&
+          /\.(mp3|wav|ogg|m4a|aac|flac|jpg|jpeg|png|webp|mp4|webm|mov|mkv)$/i.test(entry.name) &&
+          (allowVideo || !/\.(mp4|webm|mov|mkv)$/i.test(entry.name))
+        ) {
           allFiles.push(relativePath);
         }
       }
@@ -98,6 +106,7 @@ type PartialSettingsInput = {
   language?: Language;
   theme?: ThemeChoice;
   backgroundImage?: string | null;
+  loginBackground?: string | null;
   introSound?: string | null;
   backgroundSound?: string | null;
   memoryEnabled?: boolean;
@@ -122,6 +131,10 @@ export function sanitizeSettingsInput(input: PartialSettingsInput): PartialSetti
 
   if (typeof input.backgroundImage === "string" || input.backgroundImage === null) {
     clean.backgroundImage = input.backgroundImage;
+  }
+
+  if (typeof input.loginBackground === "string" || input.loginBackground === null) {
+    clean.loginBackground = input.loginBackground;
   }
 
   if (typeof input.introSound === "string" || input.introSound === null) {

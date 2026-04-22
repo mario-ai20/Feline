@@ -15,15 +15,17 @@ export default async function HomePage() {
 
   const settings = await ensureUserSettings(currentUser.id);
 
-  const [threads, backgrounds, introSounds, backgroundSounds] = await Promise.all([
+  const [threads, backgrounds, loginBackgrounds, introSounds, backgroundSounds] =
+    await Promise.all([
     prisma.chatThread.findMany({
-      where: { userId: currentUser.id },
+      where: { userId: currentUser.id, isNsfw: settings.nsfwPlusEnabled },
       orderBy: { updatedAt: "desc" },
       take: 40,
       select: {
         id: true,
         title: true,
         updatedAt: true,
+        isNsfw: true,
         messages: {
           orderBy: { createdAt: "desc" },
           take: 1,
@@ -34,6 +36,7 @@ export default async function HomePage() {
       },
     }),
     listMediaFiles("backgrounds"),
+    listMediaFiles("inlog-background", { allowVideo: true }),
     listMediaFiles("intro-music"),
     listMediaFiles("background-music"),
   ]);
@@ -60,6 +63,7 @@ export default async function HomePage() {
         id: thread.id,
         title: thread.title,
         updatedAt: thread.updatedAt.toISOString(),
+        isNsfw: thread.isNsfw,
         preview: thread.messages[0]?.content ?? "",
       }))}
       initialThreadId={firstThreadId}
@@ -71,6 +75,7 @@ export default async function HomePage() {
         language: settings.language,
         theme: settings.theme,
         backgroundImage: settings.backgroundImage,
+        loginBackground: settings.loginBackground,
         introSound: settings.introSound,
         backgroundSound: settings.backgroundSound,
         memoryEnabled: settings.memoryEnabled,
@@ -82,6 +87,7 @@ export default async function HomePage() {
       }}
       assets={{
         backgrounds,
+        loginBackgrounds,
         introSounds,
         backgroundSounds,
       }}

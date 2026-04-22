@@ -22,31 +22,31 @@ body {
   font-family: var(--font-title);
 }
 
-.saartje-typing {
+.feline-typing {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
   min-height: 1.1rem;
 }
 
-.saartje-typing span {
+.feline-typing span {
   width: 0.45rem;
   height: 0.45rem;
   border-radius: 9999px;
   background: currentColor;
   opacity: 0.34;
-  animation: saartje-typing-bounce 1s infinite ease-in-out;
+  animation: feline-typing-bounce 1s infinite ease-in-out;
 }
 
-.saartje-typing span:nth-child(2) {
+.feline-typing span:nth-child(2) {
   animation-delay: 0.16s;
 }
 
-.saartje-typing span:nth-child(3) {
+.feline-typing span:nth-child(3) {
   animation-delay: 0.32s;
 }
 
-@keyframes saartje-typing-bounce {
+@keyframes feline-typing-bounce {
   0%,
   80%,
   100% {

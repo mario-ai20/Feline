@@ -1,5 +1,5 @@
 services:
-  saartje:
+  feline:
     build:
       context: .
       dockerfile: Dockerfile
@@ -12,8 +12,8 @@ services:
       OLLAMA_URL: ${OLLAMA_URL:-http://127.0.0.1:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.1}
     volumes:
-      - saartje-data:/data
+      - feline-data:/data
     restart: unless-stopped
 
 volumes:
-  saartje-data:
+  feline-data:

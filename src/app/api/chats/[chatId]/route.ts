@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthenticatedUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { ensureUserSettings } from "@/lib/settings";
 
 export const runtime = "nodejs";
 
@@ -18,11 +19,13 @@ export async function GET(
   }
 
   const { chatId } = await context.params;
+  const settings = await ensureUserSettings(currentUser.id);
 
   const thread = await prisma.chatThread.findFirst({
     where: {
       id: chatId,
       userId: currentUser.id,
+      isNsfw: settings.nsfwPlusEnabled,
     },
     include: {
       messages: {
@@ -54,11 +57,13 @@ export async function DELETE(
   }
 
   const { chatId } = await context.params;
+  const settings = await ensureUserSettings(currentUser.id);
 
   const existing = await prisma.chatThread.findFirst({
     where: {
       id: chatId,
       userId: currentUser.id,
+      isNsfw: settings.nsfwPlusEnabled,
     },
     select: {
       id: true,

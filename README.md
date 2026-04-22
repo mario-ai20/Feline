@@ -1,88 +1,154 @@
-# Saartje AI
+﻿# Feline AI
 
-Saartje is een Next.js webapp met lokale login, chatgeschiedenis, instellingen en media-ondersteuning.
+Feline is a Next.js web app with local accounts, separate chats, per-account settings, backgrounds, sounds and NSFW+ separation.
+Discord name: `Felinefoil`
 
-## Vereisten
+## What Feline needs
 
-- Node.js 20+ voor lokale ontwikkeling
-- Docker voor een online deployment
-- Een online host met Docker en een persistent volume
+For local use on your own PC:
 
-## Installatie
+- Node.js 20 or newer
+- Ollama running locally on `http://127.0.0.1:11434`
+- A modern browser
+- Camera access if you want to use NSFW+ age verification
+- Microphone access if you want to use intro or sound features in the browser
+
+For a public online deployment for other people:
+
+- A public host that supports Node or Docker
+- Persistent storage for the database
+- An AI backend that is reachable from the server
+- `NEXTAUTH_URL` set to the public URL
+- HTTPS recommended for logins and browser permissions
+
+Important:
+- The app is local-first by default.
+- `127.0.0.1` only works on your own machine.
+- If other people should use Feline from a website, you must host the app and AI backend online.
+
+## Quick start
 
 ```bash
 npm install
 copy .env.example .env
 ```
 
-Vul daarna `.env` in met ten minste:
+Fill in `.env` with at least:
 
 ```env
-NEXTAUTH_SECRET=een-lange-willekeurige-sleutel
-NEXTAUTH_URL=http://localhost:3000
-OLLAMA_URL=http://127.0.0.1:11434
-OLLAMA_MODEL=llama3.1
+DATABASE_URL="file:./dev.db"
+NEXTAUTH_SECRET="replace-with-a-long-random-secret"
+NEXTAUTH_URL="http://localhost:3000"
+OLLAMA_URL="http://127.0.0.1:11434"
+OLLAMA_MODEL="llama3.1"
 ```
 
-Initialiseer de database:
+Initialize the database:
 
 ```bash
 npm run db:init
 npm run prisma:generate
 ```
 
-Start de webversie:
+Start the app:
 
 ```bash
 npm run dev
 ```
 
-Open daarna:
+Or double click `start-feline.bat` in the project folder. It starts the server and opens the browser automatically.
+
+Then open:
 
 ```text
 http://localhost:3000
 ```
 
-## Online zetten met Docker
+## What users can do
 
-De makkelijkste gratis route is een Docker-host met een persistent volume.
+- Create a local account with name, last name, birth date, username and password
+- Keep chats and settings per account
+- Use separate normal and NSFW+ chat spaces
+- Choose backgrounds, login backgrounds, intro sounds and background sounds per account
+- Use folder-based media categories in `public/backgrounds/`
+- Save memory and adult-memory settings per account
 
-1. Zet de code op GitHub.
-2. Laat de host de repo of een Docker image gebruiken.
-3. Geef deze environment variables mee:
+## Media folders
+
+Put your own files in these folders:
+
+- `public/backgrounds/` for normal backgrounds
+- `public/backgrounds/nsfw/` for NSFW-only backgrounds
+- `public/inlog-background/` for login backgrounds
+- `public/intro-music/` for intro sounds
+- `public/background-music/` for background sounds
+- `public/intro-assets/` for the fixed Feline logo and intro art
+
+Background folders are grouped by folder name. For example, everything inside `public/backgrounds/Intens/` appears together as the `Intens` category.
+
+Login backgrounds can be images or videos:
+
+- `.mp4`
+- `.webm`
+- `.ogg`
+- `.jpg`
+- `.jpeg`
+- `.png`
+- `.webp`
+
+## Settings behavior
+
+- Settings are saved per account.
+- Press `Opslaan` to keep changes.
+- Backgrounds and sounds stay tied to your account until you change them again.
+- New media files are picked up when you reopen settings or refresh the media list.
+- The app logo/tab icon is fixed to Feline.
+- There is no separate profile-icon picker in settings anymore.
+
+## Public deployment with Docker
+
+If you want Feline online for other people, use Docker plus a persistent volume.
+
+1. Put the code on GitHub.
+2. Deploy the repo to a Docker-capable host.
+3. Mount persistent storage for SQLite at `/data`.
+4. Point `DATABASE_URL` at the volume, for example:
 
 ```env
-DATABASE_URL=file:/data/dev.db
-NEXTAUTH_SECRET=een-lange-willekeurige-sleutel
-NEXTAUTH_URL=https://jouw-domein.example
-OLLAMA_URL=https://jouw-online-ollama.example
-OLLAMA_MODEL=llama3.1
+DATABASE_URL="file:/data/dev.db"
+NEXTAUTH_SECRET="replace-with-a-long-random-secret"
+NEXTAUTH_URL="https://your-public-url.example"
+OLLAMA_URL="https://your-hosted-ai.example"
+OLLAMA_MODEL="llama3.1"
 ```
 
-4. Mount een persistent volume op `/data`.
-5. Start de container.
+5. Start the container.
 
-Lokaal testen met Docker:
+Local Docker test:
 
 ```bash
 docker compose up --build
 ```
 
-Daarna openen:
+Then open:
 
 ```text
 http://localhost:3000
 ```
 
-Belangrijk:
+## Useful scripts
 
-- De app draait dan online, maar je AI-backend moet ook online bereikbaar zijn via `OLLAMA_URL`.
-- Gebruik voor een publieke site dus geen lokale `127.0.0.1`-waarde meer.
+```bash
+npm run lint
+npm run build
+npm run prisma:generate
+npm run prisma:studio
+npm run db:init
+```
 
-## Media-mappen
+## Notes
 
-Plaats eigen bestanden in:
-
-- `public/backgrounds/`
-- `public/intro-music/`
-- `public/background-music/`
+- Chats are separated into normal and NSFW+ spaces.
+- NSFW+ needs age verification.
+- The app uses Ollama for local AI responses.
+- Database and settings are stored with Prisma and SQLite by default.

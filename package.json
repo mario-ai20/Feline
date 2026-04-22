@@ -1,8 +1,8 @@
 {
-  "name": "saartje",
+  "name": "feline",
   "version": "0.1.0",
   "private": true,
-  "description": "Saartje AI web app",
+  "description": "Feline AI web app",
   "author": "Mattiz Hoornaert",
   "scripts": {
     "dev": "next dev",

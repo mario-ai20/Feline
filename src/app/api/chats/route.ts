@@ -16,12 +16,14 @@ export async function GET(request: Request) {
     return unauthorized();
   }
 
+  const settings = await ensureUserSettings(currentUser.id);
   const { searchParams } = new URL(request.url);
   const query = searchParams.get("query")?.trim() ?? "";
 
   const threads = await prisma.chatThread.findMany({
     where: {
       userId: currentUser.id,
+      isNsfw: settings.nsfwPlusEnabled,
       ...(query
         ? {
             OR: [
@@ -43,6 +45,7 @@ export async function GET(request: Request) {
       id: true,
       title: true,
       updatedAt: true,
+      isNsfw: true,
       messages: {
         orderBy: { createdAt: "desc" },
         take: 1,
@@ -75,11 +78,13 @@ export async function POST() {
     data: {
       userId: currentUser.id,
       title: getDefaultChatTitle(settings.language),
+      isNsfw: settings.nsfwPlusEnabled,
     },
     select: {
       id: true,
       title: true,
       updatedAt: true,
+      isNsfw: true,
     },
   });
 

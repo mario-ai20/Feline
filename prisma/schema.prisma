@@ -60,6 +60,7 @@ model UserSettings {
   language         Language    @default(NL)
   theme            ThemeChoice @default(SUNSET)
   backgroundImage  String?
+  loginBackground  String?     @default("Standaard.mp4")
   introSound       String?
   backgroundSound  String?
   memoryEnabled    Boolean     @default(false)
@@ -80,6 +81,7 @@ model ChatThread {
   userId    String
   user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   title     String
+  isNsfw    Boolean       @default(false)
   messages  ChatMessage[]
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt

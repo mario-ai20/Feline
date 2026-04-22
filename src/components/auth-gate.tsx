@@ -1,8 +1,13 @@
 "use client";
 
 import Image from "next/image";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState, useSyncExternalStore } from "react";
 import { signIn } from "next-auth/react";
+import {
+  getLoginBackgroundSnapshot,
+  hydrateLoginBackgroundFromStorage,
+  subscribeToLoginBackground,
+} from "@/lib/login-preferences";
 
 type RegisterFormState = {
   firstName: string;
@@ -20,11 +25,53 @@ type LoginFormState = {
 
 type AuthView = "home" | "register" | "login";
 
-const logoSrc = "/intro-assets/saartje%20kalebassen.jpg";
-const loginBackgroundSrc = "/inlog-background/background.jpg";
+const defaultLoginIcon = "/intro-assets/feline%20kalebassen.jpg";
+function encodeAssetPath(assetPath: string): string {
+  return assetPath
+    .split("/")
+    .map((part) => encodeURIComponent(part))
+    .join("/");
+}
+
+function isVideoFile(fileName: string): boolean {
+  return /\.(mp4|webm|ogg)$/i.test(fileName);
+}
+
+function getVideoMimeType(fileName: string): string {
+  if (/\.webm$/i.test(fileName)) {
+    return "video/webm";
+  }
+
+  if (/\.ogg$/i.test(fileName)) {
+    return "video/ogg";
+  }
+
+  return "video/mp4";
+}
+
+function setDocumentIcon(href: string) {
+  const links = Array.from(document.querySelectorAll<HTMLLinkElement>('link[rel*="icon"]'));
+  if (links.length === 0) {
+    const link = document.createElement("link");
+    link.rel = "icon";
+    link.href = href;
+    document.head.appendChild(link);
+    return;
+  }
+
+  for (const link of links) {
+    link.href = href;
+  }
+}
 
 export function AuthGate() {
   const [view, setView] = useState<AuthView>("home");
+  const loginBackground = useSyncExternalStore(
+    subscribeToLoginBackground,
+    getLoginBackgroundSnapshot,
+    getLoginBackgroundSnapshot,
+  );
+  const loginIconUrl = defaultLoginIcon;
   const [registerForm, setRegisterForm] = useState<RegisterFormState>({
     firstName: "",
     lastName: "",
@@ -42,6 +89,11 @@ export function AuthGate() {
   const [loginError, setLoginError] = useState<string | null>(null);
   const [isRegistering, setIsRegistering] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+
+  useEffect(() => {
+    hydrateLoginBackgroundFromStorage();
+    setDocumentIcon(loginIconUrl);
+  }, [loginIconUrl]);
 
   function goToHome() {
     setView("home");
@@ -157,24 +209,40 @@ export function AuthGate() {
 
   return (
     <main
-      className="min-h-screen bg-[#f7f2ed] px-4 py-6 text-[#2f1c1a]"
-      style={{
-        backgroundImage: `linear-gradient(180deg, rgba(16, 20, 35, 0.36), rgba(16, 20, 35, 0.5)), url('${loginBackgroundSrc}')`,
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-      }}
+      className="relative min-h-screen overflow-hidden bg-[#0d1018] px-4 py-6 text-[#2f1c1a]"
     >
-      <section className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-4xl flex-col">
+      <div className="pointer-events-none absolute inset-0 z-0">
+        {isVideoFile(loginBackground) ? (
+          <video
+            className="absolute inset-0 h-full w-full object-cover"
+            autoPlay
+            muted
+            loop
+            playsInline
+            preload="auto"
+          >
+            <source
+              src={`/inlog-background/${encodeAssetPath(loginBackground)}`}
+              type={getVideoMimeType(loginBackground)}
+            />
+          </video>
+        ) : (
+          <div
+            className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+            style={{
+              backgroundImage: `linear-gradient(180deg, rgba(16, 20, 35, 0.36), rgba(16, 20, 35, 0.5)), url('/inlog-background/${encodeAssetPath(
+                loginBackground,
+              )}')`,
+            }}
+          />
+        )}
+        <div className="absolute inset-0 bg-[#0d1018]/25" />
+      </div>
+
+      <section className="relative z-10 mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-4xl flex-col">
         <div className="flex flex-1 items-center justify-center">
           <div className="relative h-56 w-56 overflow-hidden rounded-[2rem] border border-white/70 bg-white/65 p-3 shadow-2xl backdrop-blur-sm sm:h-72 sm:w-72">
-            <Image
-              src={logoSrc}
-              alt="Saartje logo"
-              fill
-              sizes="(max-width: 768px) 240px, 320px"
-              className="object-cover"
-              priority
-            />
+            <Image src={loginIconUrl} alt="Feline logo" fill unoptimized sizes="(max-width: 768px) 240px, 320px" className="object-contain" />
           </div>
         </div>
 

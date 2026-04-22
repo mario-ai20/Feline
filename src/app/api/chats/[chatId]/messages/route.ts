@@ -144,10 +144,13 @@ export async function POST(
     return NextResponse.json({ error: "Empty message" }, { status: 400 });
   }
 
+  const settings = await ensureUserSettings(currentUser.id);
+
   const thread = await prisma.chatThread.findFirst({
     where: {
       id: chatId,
       userId: currentUser.id,
+      isNsfw: settings.nsfwPlusEnabled,
     },
     select: {
       id: true,
@@ -164,7 +167,6 @@ export async function POST(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const settings = await ensureUserSettings(currentUser.id);
   let activeSettings = settings;
 
   async function saveAssistantAndRespond(text: string, language: "NL" | "FR" | "DE" | "EL") {
