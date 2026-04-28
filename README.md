@@ -1,4 +1,4 @@
-# Feline
+﻿# Feline
 
 Feline is een lokale Next.js-app met accounts, aparte chats, instellingen per gebruiker, achtergronden, geluiden en NSFW+-scheiding.
 
@@ -24,7 +24,7 @@ Feline is standaard alleen voor lokaal gebruik.
 
 ## Installeren
 
-Kloon eerst de repository en installeer Git LFS ��n keer:
+Kloon eerst de repository en installeer Git LFS één keer:
 
 ```bash
 git clone https://github.com/mario-ai20/Feline.git
@@ -46,17 +46,11 @@ Vul minstens deze waarden in:
 DATABASE_URL="file:./dev.db"
 NEXTAUTH_SECRET="replace-with-a-long-random-secret"
 NEXTAUTH_URL="http://localhost:3000"
-BUILDER_CODE="your-private-builder-code"
-BUILDER_USERNAME="your-builder-username"
-BUILDER_PASSWORD="your-builder-password"
-BUILDER_NAME="Feline Builder"
 OLLAMA_URL="http://127.0.0.1:11434"
 OLLAMA_MODEL="llama3.1"
 ```
 
-De builder-flow werkt in 2 stappen:
-1. Klik op `Builder code` en vul de geheime code in.
-2. Vul daarna je builder-username en wachtwoord in om volledig toegang te krijgen.
+Builder-toegang werkt apart van de gewone login. De nodige builder-gegevens krijg je privé van de beheerder.
 
 ## Database klaarzetten
 
