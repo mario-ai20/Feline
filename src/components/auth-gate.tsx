@@ -116,36 +116,6 @@ export function AuthGate() {
     setLoginError(null);
   }
 
-  const refreshGitUpdateStatus = useCallback(async () => {
-    setGitUpdateLoading(true);
-    setGitUpdateError(null);
-    setGitUpdateMessage(null);
-
-    try {
-      const response = await fetch("/api/update", {
-        method: "GET",
-        cache: "no-store",
-      });
-
-      const payload = (await response.json().catch(() => null)) as
-        | { status?: typeof gitUpdateStatus; error?: string }
-        | null;
-
-      if (!response.ok) {
-        setGitUpdateError(payload?.error ?? "GitHub-status kon niet worden opgehaald.");
-        return;
-      }
-
-      if (payload?.status) {
-        setGitUpdateStatus(payload.status);
-      }
-    } catch {
-      setGitUpdateError("GitHub-status kon niet worden opgehaald.");
-    } finally {
-      setGitUpdateLoading(false);
-    }
-  }, []);
-
   const applyGitUpdate = useCallback(async () => {
     setGitUpdateLoading(true);
     setGitUpdateError(null);
@@ -180,14 +150,6 @@ export function AuthGate() {
       setGitUpdateLoading(false);
     }
   }, []);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      void refreshGitUpdateStatus();
-    }, 0);
-
-    return () => window.clearTimeout(timer);
-  }, [refreshGitUpdateStatus]);
 
   async function handleRegister(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -334,21 +296,48 @@ export function AuthGate() {
         </div>
 
         {view === "home" && (
-          <div className="mt-auto grid gap-4 pb-2 sm:grid-cols-2">
-            <button
-              type="button"
-              onClick={() => setView("register")}
-              className="rounded-2xl bg-[#df5f35] px-5 py-4 text-xl font-semibold text-white shadow-xl transition hover:bg-[#c9502b]"
-            >
-              Account aanmaken
-            </button>
-            <button
-              type="button"
-              onClick={() => setView("login")}
-              className="rounded-2xl bg-[#1f2937] px-5 py-4 text-xl font-semibold text-white shadow-xl transition hover:bg-[#111827]"
-            >
-              Inloggen
-            </button>
+          <div className="mt-auto pb-2">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => setView("register")}
+                className="rounded-2xl bg-[#df5f35] px-5 py-4 text-xl font-semibold text-white shadow-xl transition hover:bg-[#c9502b]"
+              >
+                Account aanmaken
+              </button>
+              <button
+                type="button"
+                onClick={() => setView("login")}
+                className="rounded-2xl bg-[#1f2937] px-5 py-4 text-xl font-semibold text-white shadow-xl transition hover:bg-[#111827]"
+              >
+                Inloggen
+              </button>
+            </div>
+
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  void applyGitUpdate();
+                }}
+                disabled={gitUpdateLoading}
+                className="rounded-lg border border-black/15 bg-white/95 px-3 py-2 text-xs font-semibold shadow-lg backdrop-blur-sm hover:bg-white disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {gitUpdateLoading ? "Bezig..." : "Update vanuit GitHub"}
+              </button>
+            </div>
+
+            {gitUpdateStatus && (
+              <div className="mt-2 ml-auto max-w-[18rem] rounded-lg bg-white/90 px-3 py-2 text-[11px] text-black/60 shadow">
+                <span className="block">
+                  {gitUpdateStatus.behind > 0 ? `${gitUpdateStatus.behind} update(s) klaar` : "Bijgewerkt"}
+                </span>
+                {gitUpdateStatus.reason && <span className="mt-0.5 block text-black/50">{gitUpdateStatus.reason}</span>}
+              </div>
+            )}
+
+            {gitUpdateMessage && <p className="mt-2 text-right text-[11px] text-emerald-700">{gitUpdateMessage}</p>}
+            {gitUpdateError && <p className="mt-2 text-right text-[11px] text-red-700">{gitUpdateError}</p>}
           </div>
         )}
 
@@ -487,31 +476,6 @@ export function AuthGate() {
             >
               {isRegistering ? "Account aanmaken..." : "Account aanmaken"}
             </button>
-
-            <div className="absolute bottom-4 right-4 flex flex-col items-end gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  void refreshGitUpdateStatus();
-                }}
-                disabled={gitUpdateLoading}
-                className="rounded-lg border border-black/15 bg-white/95 px-3 py-2 text-xs font-semibold shadow-lg backdrop-blur-sm hover:bg-white disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                {gitUpdateLoading ? "Controleren..." : "Update vanuit GitHub"}
-              </button>
-              {gitUpdateStatus && (
-                <div className="max-w-[11rem] rounded-lg bg-white/90 px-2 py-1 text-[11px] text-black/60 shadow">
-                  <span className="block">
-                    {gitUpdateStatus.behind > 0
-                      ? `${gitUpdateStatus.behind} update(s) klaar`
-                      : "Bijgewerkt"}
-                  </span>
-                  {gitUpdateStatus.reason && <span className="mt-0.5 block text-black/50">{gitUpdateStatus.reason}</span>}
-                </div>
-              )}
-              {gitUpdateMessage && <span className="max-w-[11rem] text-[11px] text-emerald-700">{gitUpdateMessage}</span>}
-              {gitUpdateError && <span className="max-w-[11rem] text-[11px] text-red-700">{gitUpdateError}</span>}
-            </div>
           </form>
         )}
 
@@ -580,31 +544,6 @@ export function AuthGate() {
             >
               {isLoggingIn ? "Inloggen..." : "Inloggen"}
             </button>
-
-            <div className="absolute bottom-4 right-4 flex flex-col items-end gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  void applyGitUpdate();
-                }}
-                disabled={gitUpdateLoading}
-                className="rounded-lg border border-black/15 bg-white/95 px-3 py-2 text-xs font-semibold shadow-lg backdrop-blur-sm hover:bg-white disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                {gitUpdateLoading ? "Bezig..." : "Update vanuit GitHub"}
-              </button>
-              {gitUpdateStatus && (
-                <div className="max-w-[11rem] rounded-lg bg-white/90 px-2 py-1 text-[11px] text-black/60 shadow">
-                  <span className="block">
-                    {gitUpdateStatus.behind > 0
-                      ? `${gitUpdateStatus.behind} update(s) klaar`
-                      : "Bijgewerkt"}
-                  </span>
-                  {gitUpdateStatus.reason && <span className="mt-0.5 block text-black/50">{gitUpdateStatus.reason}</span>}
-                </div>
-              )}
-              {gitUpdateMessage && <span className="max-w-[11rem] text-[11px] text-emerald-700">{gitUpdateMessage}</span>}
-              {gitUpdateError && <span className="max-w-[11rem] text-[11px] text-red-700">{gitUpdateError}</span>}
-            </div>
           </form>
         )}
       </section>
