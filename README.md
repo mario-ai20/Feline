@@ -1,4 +1,4 @@
-# Feline
+﻿# Feline
 
 Feline is een lokale Next.js-app met accounts, aparte chats, instellingen per gebruiker, achtergronden, geluiden en NSFW+-scheiding.
 
@@ -46,14 +46,11 @@ Vul minstens deze waarden in:
 DATABASE_URL="file:./dev.db"
 NEXTAUTH_SECRET="replace-with-a-long-random-secret"
 NEXTAUTH_URL="http://localhost:3000"
-BUILDER_USERNAME="builder"
-BUILDER_PASSWORD="change-this-to-a-strong-password"
-BUILDER_NAME="Builder"
 OLLAMA_URL="http://127.0.0.1:11434"
 OLLAMA_MODEL="llama3.1"
 ```
 
-De builder-login is een speciaal account met extra rechten. Je kiest zelf de username en het wachtwoord via `.env`.
+Builder-toegang werkt apart van de gewone login. De nodige builder-gegevens krijg je privé van de beheerder.
 
 ## Database klaarzetten
 

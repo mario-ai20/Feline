@@ -2,12 +2,13 @@ import type { NextAuthOptions } from "next-auth";
 import { getServerSession } from "next-auth/next";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { prisma } from "@/lib/prisma";
-import { hashPassword } from "@/lib/password";
 import { verifyPassword } from "@/lib/password";
 
+const builderCode = process.env.BUILDER_CODE?.trim() ?? "";
 const builderUsername = process.env.BUILDER_USERNAME?.trim().toLowerCase() ?? "";
 const builderPassword = process.env.BUILDER_PASSWORD ?? "";
-const builderName = process.env.BUILDER_NAME?.trim() || "Builder";
+const builderName = process.env.BUILDER_NAME?.trim() || "Feline Builder";
+const builderInternalUsername = "__builder__";
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -16,31 +17,34 @@ export const authOptions: NextAuthOptions = {
       credentials: {
         username: { label: "Username", type: "text" },
         password: { label: "Password", type: "password" },
+        builderCode: { label: "Builder code", type: "password" },
       },
       async authorize(credentials) {
         const username = credentials?.username?.toString().trim().toLowerCase();
         const password = credentials?.password?.toString() ?? "";
+        const submittedBuilderCode = credentials?.builderCode?.toString().trim() ?? "";
 
-        if (!username || !password) {
-          return null;
-        }
+        if (submittedBuilderCode) {
+          if (!builderCode || submittedBuilderCode !== builderCode) {
+            return null;
+          }
 
-        if (builderUsername && username === builderUsername) {
-          if (!builderPassword || password !== builderPassword) {
+          if (!builderUsername || !builderPassword) {
+            return null;
+          }
+
+          if (!username || !password) {
+            return null;
+          }
+
+          if (username !== builderUsername || password !== builderPassword) {
             return null;
           }
 
           const builderUser = await prisma.user.upsert({
-            where: { username: builderUsername },
-            update: {
-              name: builderName,
-              passwordHash: hashPassword(builderPassword),
-            },
-            create: {
-              username: builderUsername,
-              name: builderName,
-              passwordHash: hashPassword(builderPassword),
-            },
+            where: { username: builderInternalUsername },
+            update: { name: builderName },
+            create: { username: builderInternalUsername, name: builderName },
             select: {
               id: true,
               name: true,
@@ -55,9 +59,13 @@ export const authOptions: NextAuthOptions = {
             name: builderUser.name ?? builderName,
             email: builderUser.email,
             image: builderUser.image,
-            username: builderUser.username ?? builderUsername,
+            username: builderUser.username ?? builderInternalUsername,
             role: "builder",
           };
+        }
+
+        if (!username || !password) {
+          return null;
         }
 
         const user = await prisma.user.findUnique({
@@ -149,7 +157,7 @@ export async function getAuthenticatedUser() {
     return null;
   }
 
-  const role = user.username && builderUsername && user.username.toLowerCase() === builderUsername ? "builder" : "user";
+  const role = user.username === builderInternalUsername ? "builder" : "user";
 
   return {
     id: user.id,
