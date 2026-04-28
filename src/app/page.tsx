@@ -14,11 +14,12 @@ export default async function HomePage() {
   }
 
   const settings = await ensureUserSettings(currentUser.id);
+  const isBuilder = currentUser.role === "builder";
 
   const [threads, backgrounds, loginBackgrounds, introSounds, backgroundSounds] =
     await Promise.all([
     prisma.chatThread.findMany({
-      where: { userId: currentUser.id, isNsfw: settings.nsfwPlusEnabled },
+      where: isBuilder ? { userId: currentUser.id } : { userId: currentUser.id, isNsfw: settings.nsfwPlusEnabled },
       orderBy: { updatedAt: "desc" },
       take: 40,
       select: {
@@ -59,6 +60,7 @@ export default async function HomePage() {
       return (
     <ChatShell
       userName={currentUser.name ?? null}
+      isBuilder={isBuilder}
       initialThreads={threads.map((thread) => ({
         id: thread.id,
         title: thread.title,

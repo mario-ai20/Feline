@@ -5,6 +5,8 @@ import { hashPassword } from "@/lib/password";
 
 export const runtime = "nodejs";
 
+const builderUsername = process.env.BUILDER_USERNAME?.trim().toLowerCase() ?? "";
+
 type RegisterInput = {
   firstName?: string;
   lastName?: string;
@@ -51,6 +53,10 @@ export async function POST(request: Request) {
   }
 
   const username = usernameRaw.toLowerCase();
+
+  if (builderUsername && username === builderUsername) {
+    return badRequest("Deze username is gereserveerd.");
+  }
 
   try {
     const user = await prisma.user.create({

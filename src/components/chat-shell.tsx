@@ -247,6 +247,7 @@ function getBackgroundCategory(filePath: string): BackgroundCategory {
 
 export function ChatShell({
   userName,
+  isBuilder,
   initialThreads,
   initialThreadId,
   initialMessages,
@@ -254,6 +255,7 @@ export function ChatShell({
   assets,
 }: {
   userName: string | null;
+  isBuilder: boolean;
   initialThreads: ThreadSummary[];
   initialThreadId: string | null;
   initialMessages: ChatMessage[];
@@ -298,6 +300,7 @@ export function ChatShell({
   const [introSoundCategoryFilter, setIntroSoundCategoryFilter] = useState<"all" | "short" | "long">("all");
   const [backgroundSoundFilter, setBackgroundSoundFilter] = useState("");
   const [introSoundDurations, setIntroSoundDurations] = useState<Record<string, number | null>>({});
+  const [builderNormalView, setBuilderNormalView] = useState(false);
 
   const introAudioRef = useRef<HTMLAudioElement | null>(null);
   const bgAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -312,9 +315,11 @@ export function ChatShell({
 
   const t = useMemo(() => getDictionary(settings.language), [settings.language]);
   const palette = themeStyles[settings.theme];
+  const builderPreviewAll = isBuilder && !builderNormalView;
 
   const selectedBackgroundImage =
-    settings.backgroundImage && (!isNsfwBackground(settings.backgroundImage) || settings.nsfwPlusEnabled)
+    settings.backgroundImage &&
+    (!isNsfwBackground(settings.backgroundImage) || settings.nsfwPlusEnabled || builderPreviewAll)
       ? settings.backgroundImage
       : null;
   const backgroundImageUrl = selectedBackgroundImage
@@ -328,12 +333,12 @@ export function ChatShell({
   }, [introLogoUrl]);
 
   const allowedBackgrounds = useMemo(() => {
-    if (settings.nsfwPlusEnabled) {
+    if (settings.nsfwPlusEnabled || builderPreviewAll) {
       return assetState.backgrounds;
     }
 
     return assetState.backgrounds.filter((file) => !isNsfwBackground(file));
-  }, [assetState.backgrounds, settings.nsfwPlusEnabled]);
+  }, [assetState.backgrounds, builderPreviewAll, settings.nsfwPlusEnabled]);
 
   const filteredBackgrounds = useMemo(() => {
     const queryText = `${backgroundFilter} ${settingsQuery}`.trim().toLowerCase();
@@ -341,14 +346,14 @@ export function ChatShell({
 
     if (
       settings.backgroundImage &&
-      (!isNsfwBackground(settings.backgroundImage) || settings.nsfwPlusEnabled) &&
+      (!isNsfwBackground(settings.backgroundImage) || settings.nsfwPlusEnabled || builderPreviewAll) &&
       !result.includes(settings.backgroundImage)
     ) {
       return [settings.backgroundImage, ...result];
     }
 
     return result;
-  }, [allowedBackgrounds, backgroundFilter, settings.backgroundImage, settings.nsfwPlusEnabled, settingsQuery]);
+  }, [allowedBackgrounds, backgroundFilter, builderPreviewAll, settings.backgroundImage, settings.nsfwPlusEnabled, settingsQuery]);
 
   const filteredLoginBackgrounds = useMemo(() => {
     const queryText = `${loginBackgroundFilter} ${settingsQuery}`.trim().toLowerCase();
@@ -363,18 +368,20 @@ export function ChatShell({
 
   const visibleBackgrounds = useMemo(() => {
     const activeBackgroundCategoryFilter =
-      !settings.nsfwPlusEnabled && backgroundCategoryFilter === "nsfw" ? "all" : backgroundCategoryFilter;
+      !settings.nsfwPlusEnabled && !builderPreviewAll && backgroundCategoryFilter === "nsfw"
+        ? "all"
+        : backgroundCategoryFilter;
 
     if (activeBackgroundCategoryFilter === "all") {
       return filteredBackgrounds;
     }
 
     return filteredBackgrounds.filter((file) => getBackgroundCategory(file).key === activeBackgroundCategoryFilter);
-  }, [backgroundCategoryFilter, filteredBackgrounds, settings.nsfwPlusEnabled]);
+  }, [backgroundCategoryFilter, builderPreviewAll, filteredBackgrounds, settings.nsfwPlusEnabled]);
 
   const visibleBackgroundCategories = useMemo(
-    () => backgroundCategories.filter((category) => category.key !== "nsfw" || settings.nsfwPlusEnabled),
-    [settings.nsfwPlusEnabled],
+    () => backgroundCategories.filter((category) => category.key !== "nsfw" || settings.nsfwPlusEnabled || builderPreviewAll),
+    [builderPreviewAll, settings.nsfwPlusEnabled],
   );
 
   const backgroundSections = useMemo(() => {
@@ -1292,6 +1299,16 @@ export function ChatShell({
             </div>
 
             <div className="flex gap-2">
+              {isBuilder && (
+                <button
+                  type="button"
+                  onClick={() => setBuilderNormalView((prev) => !prev)}
+                  className="rounded-xl bg-white/80 px-3 py-2 text-sm font-semibold text-black transition hover:scale-[1.02]"
+                  title={builderNormalView ? "Schakel naar builder-overzicht" : "Schakel naar normale weergave"}
+                >
+                  {builderNormalView ? "Builder: alles" : "Builder: normaal"}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => {
