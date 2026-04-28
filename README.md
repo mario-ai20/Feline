@@ -114,7 +114,6 @@ Inlog-achtergronden mogen deze bestanden zijn:
 - Achtergronden en geluiden blijven gekoppeld aan je account tot je ze zelf verandert.
 - Nieuwe mediabestanden verschijnen zodra je de instellingen opnieuw opent of de mediastlijst vernieuwt.
 - Het app-logo en tab-icoon staan vast op Feline.
-- Er is geen aparte profielicoon-keuze meer in de instellingen.
 
 ## Handige scripts
 
